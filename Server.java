@@ -97,3 +97,35 @@ public class Server {
         }
     }
 }
+
+import java.util.concurrent.ConcurrentHashMap;
+
+private static ConcurrentHashMap<String, ClientHandler> registeredHandles = new ConcurrentHashMap<>();
+
+@Override
+public void run() {
+    try {
+        while (true) {
+            String command = inputStream.readUTF();
+            
+            if (command.startsWith("/register")) {
+                String[] parts = command.split(" ");
+                if (parts.length == 2) {
+                    String handle = parts[1];
+                    
+                    if (registeredHandles.containsKey(handle)) {
+                        outputStream.writeUTF("Error: Registration failed. Handle or alias already exists.");
+                    } else {
+                        registeredHandles.put(handle, this);
+                        outputStream.writeUTF("Welcome " + handle + "!");
+                    }
+                } else {
+                    outputStream.writeUTF("Error: Command parameters do not match or are not allowed.");
+                }
+                outputStream.flush();
+            }
+        }
+    } catch (IOException e) {
+        System.out.println("Client disconnected.");
+    }
+}
