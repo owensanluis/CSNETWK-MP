@@ -124,8 +124,103 @@ public void run() {
                 }
                 outputStream.flush();
             }
+            
         }
     } catch (IOException e) {
         System.out.println("Client disconnected.");
     }
 }
+
+// List of valid commands with their descriptions
+const commands = {
+    "/?": "Displays all available commands.",
+    "/help": "Alias for /?, provides help information.",
+    "/upload": "Upload a file. Syntax: /upload <file-path>",
+    "/download": "Download a file. Syntax: /download <file-name>",
+    "/list": "Lists all available files on the server.",
+    "/delete": "Delete a file. Syntax: /delete <file-name>",
+};
+
+// DOM Elements for interaction
+const commandInput = document.getElementById("command-input"); // Input field for commands
+const sendButton = document.getElementById("send-button"); // Send button
+const outputArea = document.getElementById("output-area"); // Output display area
+
+/**
+ * Appends a message to the output area.
+ * @param {string} message - The message to display.
+ * @param {boolean} isError - Whether the message is an error.
+ */
+function printMessage(message, isError = false) {
+    const messageElement = document.createElement("div"); // Create a new message div
+    messageElement.textContent = message; // Set the message text
+    messageElement.style.color = isError ? "red" : "black"; // Red for errors, black otherwise
+    outputArea.appendChild(messageElement); // Add to output area
+    outputArea.scrollTop = outputArea.scrollHeight; // Auto-scroll to latest message
+}
+
+/**
+ * Displays the help message with all available commands.
+ */
+function showHelp() {
+    printMessage("Available Commands:");
+    for (const [cmd, description] of Object.entries(commands)) {
+        printMessage(`${cmd}: ${description}`); // Show each command and its description
+    }
+}
+
+/**
+ * Processes and validates the input command.
+ * @param {string} input - The command entered by the user.
+ */
+function processCommand(input) {
+    const args = input.split(" "); // Split input into command and parameters
+    const command = args[0]; // Extract the command
+    const params = args.slice(1); // Extract the parameters
+
+    // Check if the command is valid
+    if (commands[command]) {
+        if (command === "/?" || command === "/help") {
+            showHelp(); // Display help for /? or /help
+        } else {
+            // General feedback for other commands
+            printMessage(`Command recognized: ${command}`);
+            if (params.length > 0) {
+                printMessage(`Parameters provided: ${params.join(" ")}`);
+            } else {
+                printMessage("No parameters provided.");
+            }
+        }
+    } else {
+        // Invalid command error
+        printMessage("Error: Command not found.", true);
+    }
+}
+
+/**
+ * Handles the click event of the Send button.
+ */
+function handleSendButton() {
+    const input = commandInput.value.trim(); // Get the user input and trim spaces
+    if (input) {
+        processCommand(input); // Process the command
+    }
+    commandInput.value = ""; // Clear the input field after submission
+}
+
+/**
+ * Handles the Enter key press event in the input field.
+ * @param {KeyboardEvent} event - The keydown event.
+ */
+function handleEnterKey(event) {
+    if (event.key === "Enter") {
+        handleSendButton(); // Trigger send button behavior
+    }
+}
+
+// Attach event listeners for interaction
+sendButton.addEventListener("click", handleSendButton); // Click on the Send button
+commandInput.addEventListener("keydown", handleEnterKey); // Press Enter in the input box
+
+
+
