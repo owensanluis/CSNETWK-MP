@@ -117,3 +117,23 @@ public class Client {
         }
     }
 }
+
+    public void registerHandle(String handle) {
+        try {
+            // Send register command to the server
+            outputStream.writeUTF("/register " + handle);
+            outputStream.flush();
+            
+            // Receive server response
+            String response = inputStream.readUTF();
+            System.out.println(response);
+            
+            if (response.startsWith("Welcome")) {
+                System.out.println("Handle registered successfully: " + handle);
+            } else if (response.startsWith("Error")) {
+                System.out.println("Registration failed: " + response);
+            }
+        } catch (IOException e) {
+            System.out.println("An error occurred while registering the handle: " + e.getMessage());
+        }
+    }
