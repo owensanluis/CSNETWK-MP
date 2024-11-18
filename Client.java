@@ -14,16 +14,13 @@ public class Client {
         // use try-catch to catch errors
         try {
             // if command is /join
-            if(command.startsWith("/join")) {
+            if (command.startsWith("/join")) {
                 // check if client is already connected to a server
-                if(clientEndpoint == null || clientEndpoint.isClosed()) {
-
-                    //check if correct usage of the /join command
+                if (clientEndpoint == null || clientEndpoint.isClosed()) {
                     if (parameters.length != 3) {
-                        System.out.println("Error: Command parameters do not match or is not allowed.");
+                        System.out.println("Error: Command parameters do not match or are not allowed.");
                         return true;
                     }
-
                     // get the parameters of the command
                     sServerAddress = parameters[1];
                     nPort = Integer.parseInt(parameters[2]);
@@ -33,83 +30,120 @@ public class Client {
                         // instantiate the socket, reader, and writer
                         clientEndpoint = new Socket(sServerAddress, nPort);
                         final DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
-
                         System.out.println("Server: " + disReader.readUTF());
 
                         // listen to server responses in separate threads
                         // and allow program to continue if server does not have a response for readUTF.
                         new Thread(() -> getServerResponse(disReader)).start();
-
-                    } catch(IOException e) { // print error message when connection failed
-                        System.out.println("Error: Connection to the Server has failed! " +
-                                            "Please check IP Address and Port Number.");
+                    } catch (IOException e) {
+                        System.out.println("Error: Connection to the Server failed! Please check IP Address and Port Number.");
                     }
                 } else {
-                    // print an error message if client tries /join even if connected already
                     System.out.println("Error: Already connected to a server.");
                 }
             }
-            // if command is /leave
+
+            // Command: /leave
             else if (command.startsWith("/leave")) {
-                // check if client is connected to a server
                 if (clientEndpoint != null && !clientEndpoint.isClosed()) {
-                    // check if the command usage is correct
-                    // make sure dosWriter is not null so that it will not throw NullPointerException
                     if (parameters.length == 1) {
                         dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                         dosWriter.writeUTF("/leave");
                         clientEndpoint.close();
                         return false;
                     } else {
-                        // print error message if command usage is incorrect
-                        System.out.println("Error: Command parameters do not match or is not allowed.");
+                        System.out.println("Error: Command parameters do not match or are not allowed.");
                     }
                 } else {
-                    // print error message if client tries /leave without connecting to a server
                     System.out.println("Error: Disconnection failed. Please connect to the server first.");
                 }
             }
-            // if command is not /join and /leave AND client is connected to a server
+
+            // Command: /send <file-path>
+            else if (command.startsWith("/send")) {
+                if (clientEndpoint != null && !clientEndpoint.isClosed()) {
+                    if (parameters.length == 2) {
+                        String filePath = parameters[1];
+                        sendFileToServer(filePath);
+                    } else {
+                        System.out.println("Error: Command parameters do not match or are not allowed.");
+                    }
+                } else {
+                    System.out.println("Error: Please join a server first.");
+                }
+            }
+
             else if (clientEndpoint != null && !clientEndpoint.isClosed()) {
                 dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                 dosWriter.writeUTF(command);
             }
-            // if command is not /join and /leave AND client is NOT connected to a server
+
+            // error if client is not connected
             else {
                 System.out.println("Error: Please join a server first.");
             }
         } catch (IOException e) {
-            // catch errors and print it
             System.out.println("Error: " + e.getMessage());
         }
 
         return true;
     }
 
-    private static void getServerResponse(DataInputStream disReader) {
-        // try-catch to catch incoming errors
+    private static void sendFileToServer(String filePath) {
         try {
-            // loop to keep on reading server's response/message
-            while (true) {
-                // read server's message
-                String serverResponse = disReader.readUTF();
-                // print out the message
-                System.out.println("Server: " + serverResponse);
+            File file = new File(filePath);
+
+            // check if the file exists
+            if (!file.exists() || !file.isFile()) {
+                System.out.println("Error: File does not exist or is not a valid file.");
+                return;
             }
+
+            // create a DataOutputStream to send the file
+            DataOutputStream dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
+
+            // notify server about the /send command
+            dosWriter.writeUTF("/send " + file.getName());
+            dosWriter.flush();
+
+            long fileSize = file.length();
+            dosWriter.writeLong(fileSize);
+            dosWriter.flush();
+
+            // send file content
+            FileInputStream fileInputStream = new FileInputStream(file);
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = fileInputStream.read(buffer)) > 0) {
+                dosWriter.write(buffer, 0, bytesRead);
+            }
+            dosWriter.flush();
+            fileInputStream.close();
+
+            System.out.println("File \"" + file.getName() + "\" sent to the server successfully.");
         } catch (IOException e) {
-            // print error message
-            System.out.println("Error: " + e.getMessage());
+            System.out.println("Error while sending the file: " + e.getMessage());
         }
     }
 
+
+    private static void getServerResponse(DataInputStream disReader) {
+        try {
+            while (true) {
+                String serverResponse = disReader.readUTF();
+                System.out.println("Server: " + serverResponse);
+            }
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+        }
+    }
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String input;
         boolean keepLooping = true;
 
-        // loop to get all commands until /leave
-        while(keepLooping) {
+        while (keepLooping) {
             System.out.println("Enter command: ");
             input = sc.nextLine().trim();
 
@@ -117,23 +151,3 @@ public class Client {
         }
     }
 }
-
-    public void registerHandle(String handle) {
-        try {
-            // Send register command to the server
-            outputStream.writeUTF("/register " + handle);
-            outputStream.flush();
-            
-            // Receive server response
-            String response = inputStream.readUTF();
-            System.out.println(response);
-            
-            if (response.startsWith("Welcome")) {
-                System.out.println("Handle registered successfully: " + handle);
-            } else if (response.startsWith("Error")) {
-                System.out.println("Registration failed: " + response);
-            }
-        } catch (IOException e) {
-            System.out.println("An error occurred while registering the handle: " + e.getMessage());
-        }
-    }
