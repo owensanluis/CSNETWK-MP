@@ -4,6 +4,7 @@ import java.util.Scanner;
 
 public class Client {
     private static Socket clientEndpoint;
+    private static boolean running = true;
 
     private static boolean handleCommands(String command) {
         DataOutputStream dosWriter;
@@ -21,22 +22,27 @@ public class Client {
                         System.out.println("Error: Command parameters do not match or are not allowed.");
                         return true;
                     }
-                    // get the parameters of the command
-                    sServerAddress = parameters[1];
-                    nPort = Integer.parseInt(parameters[2]);
 
                     // try to connect to server
                     try {
+                        // get the parameters of the command
+                        sServerAddress = parameters[1];
+                        nPort = Integer.parseInt(parameters[2]);
+
                         // instantiate the socket, reader, and writer
                         clientEndpoint = new Socket(sServerAddress, nPort);
                         final DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
                         System.out.println("Server: " + disReader.readUTF());
+                        System.out.println("Enter command:");
 
                         // listen to server responses in separate threads
                         // and allow program to continue if server does not have a response for readUTF.
                         new Thread(() -> getServerResponse(disReader)).start();
                     } catch (IOException e) {
                         System.out.println("Error: Connection to the Server failed! Please check IP Address and Port Number.");
+                        return true;
+                    } catch (NumberFormatException e) {
+                        System.out.println("Error: Command parameters do not match or are not allowed.");
                     }
                 } else {
                     System.out.println("Error: Already connected to a server.");
@@ -49,13 +55,16 @@ public class Client {
                     if (parameters.length == 1) {
                         dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                         dosWriter.writeUTF("/leave");
+                        running = false;
                         clientEndpoint.close();
                         return false;
                     } else {
                         System.out.println("Error: Command parameters do not match or are not allowed.");
+                        return true;
                     }
                 } else {
                     System.out.println("Error: Disconnection failed. Please connect to the server first.");
+                    return true;
                 }
             }
 
@@ -67,9 +76,11 @@ public class Client {
                         sendFileToServer(filePath);
                     } else {
                         System.out.println("Error: Command parameters do not match or are not allowed.");
+                        return true;
                     }
                 } else {
                     System.out.println("Error: Please join a server first.");
+                    return true;
                 }
             }
 
@@ -81,9 +92,11 @@ public class Client {
             // error if client is not connected
             else {
                 System.out.println("Error: Please join a server first.");
+                return true;
             }
         } catch (IOException e) {
             System.out.println("Error: " + e.getMessage());
+            return true;
         }
 
         return true;
@@ -131,11 +144,20 @@ public class Client {
         try {
             while (true) {
                 String serverResponse = disReader.readUTF();
-                System.out.println("Server: " + serverResponse);
+                synchronized (System.out) {
+                    System.out.println("\nServer: " + serverResponse);
+                    System.out.flush();
+                    System.out.print("Enter command: ");
+                }
             }
         } catch (IOException e) {
-            System.out.println("Error: " + e.getMessage());
+            if(running)
+                System.out.println("Error: " + e.getMessage());
         }
+    }
+
+    private static boolean isConnected() {
+        return clientEndpoint != null && !clientEndpoint.isClosed() && clientEndpoint.isConnected();
     }
 
     public static void main(String[] args) {
@@ -144,10 +166,11 @@ public class Client {
         boolean keepLooping = true;
 
         while (keepLooping) {
-            System.out.println("Enter command: ");
-            input = sc.nextLine().trim();
-
-            keepLooping = handleCommands(input);
+            if (!isConnected()) {
+                System.out.println("Enter command: ");
+            }
+                input = sc.nextLine().trim();
+                keepLooping = handleCommands(input);
         }
     }
 }
