@@ -96,8 +96,6 @@ public class Client {
                     if (parameters.length == 1) {
                         dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                         dosWriter.writeUTF("/leave");
-                        running = false;
-                        clientEndpoint.close();
                         return false;
                     } else {
                         System.out.println("Error: Command parameters do not match or are not allowed.");
@@ -198,8 +196,14 @@ public class Client {
                 synchronized (System.out) {
                     System.out.println("\nServer: " + serverResponse);
                     System.out.flush();
+                    if(serverResponse.contains("Connection closed.")) {
+                        running = false;
+                        clientEndpoint.close();
+                        break;
+                    }
                     System.out.print("Enter command: ");
                 }
+
             }
         } catch (IOException e) {
             if (running)
@@ -214,14 +218,14 @@ public class Client {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         String input;
-        boolean keepLooping = true;
 
-        while (keepLooping) {
+        while (running) {
             if (!isConnected()) {
                 System.out.println("Enter command: ");
             }
+
             input = sc.nextLine().trim();
-            keepLooping = handleCommands(input);
+            running = handleCommands(input);
         }
     }
 }
