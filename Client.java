@@ -49,6 +49,47 @@ public class Client {
                 }
             }
 
+            // Command: /send <file-path>
+            else if (command.startsWith("/send")) {
+                if (clientEndpoint != null && !clientEndpoint.isClosed()) {
+                    if (parameters.length == 2) {
+                        String filePath = parameters[1];
+                        sendFileToServer(filePath);
+                    } else {
+                        System.out.println("Error: Command parameters do not match or are not allowed.");
+                        return true;
+                    }
+                } else {
+                    System.out.println("Error: Please join a server first.");
+                    return true;
+                }
+            }
+
+            // Command: /dir
+            else if (command.startsWith("/dir")) {
+                if (clientEndpoint != null && !clientEndpoint.isClosed()) {
+                    dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
+                    dosWriter.writeUTF("/dir");
+                } else {
+                    System.out.println("Error: Please join a server first.");
+                }
+            }
+
+            // Command: /get <filename>
+            else if (command.startsWith("/get")) {
+                if (clientEndpoint != null && !clientEndpoint.isClosed()) {
+                    if (parameters.length == 2) {
+                        dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
+                        dosWriter.writeUTF("/get " + parameters[1]);
+                        receiveFile(parameters[1]); // Download the file
+                    } else {
+                        System.out.println("Error: Invalid syntax. Use /get <filename>.");
+                    }
+                } else {
+                    System.out.println("Error: Please join a server first.");
+                }
+            }
+
             // Command: /leave
             else if (command.startsWith("/leave")) {
                 if (clientEndpoint != null && !clientEndpoint.isClosed()) {
@@ -64,22 +105,6 @@ public class Client {
                     }
                 } else {
                     System.out.println("Error: Disconnection failed. Please connect to the server first.");
-                    return true;
-                }
-            }
-
-            // Command: /send <file-path>
-            else if (command.startsWith("/send")) {
-                if (clientEndpoint != null && !clientEndpoint.isClosed()) {
-                    if (parameters.length == 2) {
-                        String filePath = parameters[1];
-                        sendFileToServer(filePath);
-                    } else {
-                        System.out.println("Error: Command parameters do not match or are not allowed.");
-                        return true;
-                    }
-                } else {
-                    System.out.println("Error: Please join a server first.");
                     return true;
                 }
             }
@@ -139,6 +164,32 @@ public class Client {
         }
     }
 
+    private static void receiveFile(String fileName) {
+        try {
+            DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
+            long fileSize = disReader.readLong(); // Read the file size
+
+            if (fileSize > 0) {
+                System.out.println("Receiving file: " + fileName + " (" + fileSize + " bytes)");
+                FileOutputStream fos = new FileOutputStream(fileName);
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                long totalRead = 0;
+
+                while (totalRead < fileSize && (bytesRead = disReader.read(buffer)) > 0) {
+                    fos.write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                }
+
+                fos.close();
+                System.out.println("File downloaded successfully: " + fileName);
+            } else {
+                System.out.println("Server response: File not found.");
+            }
+        } catch (IOException e) {
+            System.out.println("Error receiving file: " + e.getMessage());
+        }
+    }
 
     private static void getServerResponse(DataInputStream disReader) {
         try {
@@ -151,7 +202,7 @@ public class Client {
                 }
             }
         } catch (IOException e) {
-            if(running)
+            if (running)
                 System.out.println("Error: " + e.getMessage());
         }
     }
@@ -169,8 +220,8 @@ public class Client {
             if (!isConnected()) {
                 System.out.println("Enter command: ");
             }
-                input = sc.nextLine().trim();
-                keepLooping = handleCommands(input);
+            input = sc.nextLine().trim();
+            keepLooping = handleCommands(input);
         }
     }
 }
