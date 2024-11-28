@@ -1,5 +1,5 @@
-import java.net.*;
 import java.io.*;
+import java.net.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,6 +8,15 @@ public class Server {
 
     private static final ConcurrentHashMap<String, ClientHandler> registeredHandles = new ConcurrentHashMap<>();
     private static final List<String> storedFiles = Collections.synchronizedList(new ArrayList<>());
+    private static final String SERVER_STORAGE_DIR = "server_files"; // Directory for stored files
+
+    // Ensure the server storage directory exists
+    static {
+        File storageDir = new File(SERVER_STORAGE_DIR);
+        if (!storageDir.exists()) {
+            storageDir.mkdir();
+        }
+    }
 
     private static void handleClient(Socket clientSocket) {
         try {
@@ -18,11 +27,11 @@ public class Server {
             String[] parameters;
             String clientHandle = null;
 
-            // notify the client of successful connection
+            // Notify the client of a successful connection
             dosWriter.writeUTF("Connection to the File Exchange Server is successful!");
 
             while (true) {
-                input = disReader.readUTF(); // read client input
+                input = disReader.readUTF(); // Read client input
                 System.out.println("Server: Received \"" + input + "\" from the client.");
                 parameters = input.split(" ");
                 cmd = parameters[0];
@@ -47,18 +56,18 @@ public class Server {
                         }
                         break;
 
-                    case "/store":
+                    case "/send":
                         if (clientHandle == null) {
                             dosWriter.writeUTF("Error: Please register first using /register <handle>.");
                             break;
                         }
                         if (parameters.length == 2) {
                             String filename = parameters[1];
+                            receiveFile(disReader, filename);
                             storedFiles.add(filename);
-                            String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-                            dosWriter.writeUTF(clientHandle + "<" + timestamp + ">: Uploaded " + filename);
+                            dosWriter.writeUTF("File \"" + filename + "\" uploaded successfully.");
                         } else {
-                            dosWriter.writeUTF("Error: Invalid syntax. Use /store <filename>.");
+                            dosWriter.writeUTF("Error: Invalid syntax. Use /send <filename>.");
                         }
                         break;
 
@@ -66,7 +75,7 @@ public class Server {
                         if (storedFiles.isEmpty()) {
                             dosWriter.writeUTF("Server Directory is empty.");
                         } else {
-                            dosWriter.writeUTF("Server Directory\n" + String.join("\n", storedFiles));
+                            dosWriter.writeUTF("Server Directory:\n" + String.join("\n", storedFiles));
                         }
                         break;
 
@@ -74,9 +83,9 @@ public class Server {
                         if (parameters.length == 2) {
                             String filename = parameters[1];
                             if (storedFiles.contains(filename)) {
-                                dosWriter.writeUTF("File received from Server: " + filename);
+                                sendFile(dosWriter, filename);
                             } else {
-                                dosWriter.writeUTF("Error: File " + filename + " not found on the server.");
+                                dosWriter.writeUTF("Error: File \"" + filename + "\" not found on the server.");
                             }
                         } else {
                             dosWriter.writeUTF("Error: Invalid syntax. Use /get <filename>.");
@@ -89,9 +98,9 @@ public class Server {
                                 /join <server_ip_add> <port> - Connect to the server application
                                 /leave                      - Disconnect from the server application
                                 /register <handle>          - Register a unique handle or alias
-                                /store <filename>           - Send file to server
-                                /dir                        - Request directory file list from server
-                                /get <filename>             - Fetch a file from server
+                                /send <file-path>           - Send file to the server
+                                /dir                        - Request directory file list from the server
+                                /get <filename>             - Fetch a file from the server
                                 """);
                         break;
 
@@ -105,6 +114,52 @@ public class Server {
         } finally {
             System.out.println("Server: Connection is terminated.");
         }
+    }
+
+    private static void receiveFile(DataInputStream disReader, String filename) throws IOException {
+        File file = new File(SERVER_STORAGE_DIR, filename);
+
+        long fileSize = disReader.readLong(); // Read the file size
+        FileOutputStream fos = new FileOutputStream(file);
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        long totalRead = 0;
+
+        System.out.println("Server: Receiving file \"" + filename + "\" (" + fileSize + " bytes)");
+
+        while (totalRead < fileSize && (bytesRead = disReader.read(buffer)) > 0) {
+            fos.write(buffer, 0, bytesRead);
+            totalRead += bytesRead;
+        }
+        fos.close();
+
+        System.out.println("Server: File \"" + filename + "\" received successfully.");
+    }
+
+    private static void sendFile(DataOutputStream dosWriter, String filename) throws IOException {
+        File file = new File(SERVER_STORAGE_DIR, filename);
+
+        if (!file.exists()) {
+            dosWriter.writeUTF("Error: File \"" + filename + "\" not found.");
+            return;
+        }
+
+        long fileSize = file.length();
+        FileInputStream fis = new FileInputStream(file);
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+
+        dosWriter.writeUTF("Receiving file \"" + filename + "\" (" + fileSize + " bytes)");
+        dosWriter.writeLong(fileSize);
+
+        System.out.println("Server: Sending file \"" + filename + "\" (" + fileSize + " bytes)");
+
+        while ((bytesRead = fis.read(buffer)) > 0) {
+            dosWriter.write(buffer, 0, bytesRead);
+        }
+        fis.close();
+
+        System.out.println("Server: File \"" + filename + "\" sent successfully.");
     }
 
     public static void main(String[] args) {
@@ -136,8 +191,9 @@ public class Server {
                 } else {
                     System.out.println("Invalid port number. Please enter a number between 1024 and 65535.\n");
                 }
-            } catch (NumberFormatException e) {
+            } catch (InputMismatchException e) {
                 System.out.println("Invalid input. Please enter an integer.");
+                sc.next(); // Clear invalid input
             }
         }
     }
