@@ -85,7 +85,6 @@ public class Client {
                         noFile = false;
                         dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                         dosWriter.writeUTF("/get " + parameters[1]);
-                        receiveFile(parameters[1]); // Download the file
                     } else {
                         System.out.println("Error: Invalid syntax. Use /get <filename>.");
                     }
@@ -167,20 +166,9 @@ public class Client {
         }
     }
 
-    private static void receiveFile(String fileName) {
-        synchronized (Client.class) {
+    private static void receiveFile(String fileName, DataInputStream disReader, long fileSize) {
+        new Thread(() -> {
             try {
-                while (!noFile) {
-                    Client.class.wait(); // Wait for the flag to be updated
-                }
-
-                if (noFile) {
-                    return;
-                }
-
-                // Proceed to download the file
-                DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
-                long fileSize = disReader.readLong();
                 System.out.println("Receiving file: " + fileName + " (" + fileSize + " bytes)");
 
                 FileOutputStream fos = new FileOutputStream(fileName);
@@ -195,35 +183,37 @@ public class Client {
 
                 fos.close();
                 System.out.println("File downloaded successfully: " + fileName);
-            } catch (InterruptedException e) {
-                System.out.println("Error: Thread interrupted while waiting for server response.");
+                System.out.print("Enter command: ");
             } catch (IOException e) {
                 System.out.println("Error receiving file: " + e.getMessage());
             }
-        }
+        }).start();
     }
+
 
 
     private static void getServerResponse(DataInputStream disReader) {
         try {
             while (true) {
                 String serverResponse = disReader.readUTF();
-                synchronized (Client.class) { // Synchronize access to shared state
-                    System.out.println("\nServer: " + serverResponse);
+                synchronized (Client.class) {
+                    if (serverResponse.startsWith("Receiving file")) {
+                        String fileName = serverResponse.split(" ")[2].replace("\"", "");
+                        long fileSize = disReader.readLong();
+                        receiveFile(fileName, disReader, fileSize);
+                    } else {
+                        System.out.println("\nServer: " + serverResponse);
 
-                    // Reset the flag otherwise
-                    if (serverResponse.contains("Connection closed.")) {
-                        running = false;
-                        clientEndpoint.close();
-                        break;
+                        if (serverResponse.contains("Connection closed.")) {
+                            running = false;
+                            clientEndpoint.close();
+                            break;
+                        }
+
+                        // Print "Enter command:" only after non-file responses
+                        System.out.print("Enter command: ");
                     }
-                    else noFile = serverResponse.contains("Error: File"); // Set the flag if the file is missing
-
-                    // Notify waiting threads
-                    Client.class.notifyAll();
                 }
-
-                System.out.print("Enter command: ");
             }
         } catch (IOException e) {
             if (running) {
@@ -231,6 +221,7 @@ public class Client {
             }
         }
     }
+
 
 
     private static boolean isConnected() {

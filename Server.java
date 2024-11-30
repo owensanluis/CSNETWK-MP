@@ -82,7 +82,6 @@ public class Server {
                         if (parameters.length == 2) {
                             String filename = parameters[1];
                             if (storedFiles.contains(filename)) {
-                                dosWriter.writeUTF("OK");
                                 sendFile(dosWriter, filename);
                             } else {
                                 dosWriter.writeUTF("Error: File \"" + filename + "\" not found on the server.");
@@ -201,6 +200,7 @@ public class Server {
             System.out.println("Error: " + e.getMessage());
         } finally {
             System.out.println("Server stopped.");
+            return;
         }
     }
 
