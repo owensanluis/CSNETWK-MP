@@ -5,6 +5,7 @@ import java.util.Scanner;
 public class Client {
     private static Socket clientEndpoint;
     private static boolean running = true;
+    private static volatile boolean noFile;
 
     private static boolean handleCommands(String command) {
         DataOutputStream dosWriter;
@@ -33,7 +34,7 @@ public class Client {
                         clientEndpoint = new Socket(sServerAddress, nPort);
                         final DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
                         System.out.println("Server: " + disReader.readUTF());
-                        System.out.println("Enter command:");
+                        System.out.println("Enter command: ");
 
                         // listen to server responses in separate threads
                         // and allow program to continue if server does not have a response for readUTF.
@@ -46,11 +47,12 @@ public class Client {
                     }
                 } else {
                     System.out.println("Error: Already connected to a server.");
+                    System.out.println("Enter command: ");
                 }
             }
 
             // Command: /send <file-path>
-            else if (command.startsWith("/send")) {
+            else if (command.startsWith("/store")) {
                 if (clientEndpoint != null && !clientEndpoint.isClosed()) {
                     if (parameters.length == 2) {
                         String filePath = parameters[1];
@@ -73,12 +75,14 @@ public class Client {
                 } else {
                     System.out.println("Error: Please join a server first.");
                 }
+                return true;
             }
 
             // Command: /get <filename>
             else if (command.startsWith("/get")) {
                 if (clientEndpoint != null && !clientEndpoint.isClosed()) {
                     if (parameters.length == 2) {
+                        noFile = false;
                         dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
                         dosWriter.writeUTF("/get " + parameters[1]);
                         receiveFile(parameters[1]); // Download the file
@@ -88,6 +92,7 @@ public class Client {
                 } else {
                     System.out.println("Error: Please join a server first.");
                 }
+                return true;
             }
 
             // Command: /leave
@@ -139,7 +144,7 @@ public class Client {
             DataOutputStream dosWriter = new DataOutputStream(clientEndpoint.getOutputStream());
 
             // notify server about the /send command
-            dosWriter.writeUTF("/send " + file.getName());
+            dosWriter.writeUTF("/store " + file.getName());
             dosWriter.flush();
 
             long fileSize = file.length();
@@ -163,12 +168,21 @@ public class Client {
     }
 
     private static void receiveFile(String fileName) {
-        try {
-            DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
-            long fileSize = disReader.readLong(); // Read the file size
+        synchronized (Client.class) {
+            try {
+                while (!noFile) {
+                    Client.class.wait(); // Wait for the flag to be updated
+                }
 
-            if (fileSize > 0) {
+                if (noFile) {
+                    return;
+                }
+
+                // Proceed to download the file
+                DataInputStream disReader = new DataInputStream(clientEndpoint.getInputStream());
+                long fileSize = disReader.readLong();
                 System.out.println("Receiving file: " + fileName + " (" + fileSize + " bytes)");
+
                 FileOutputStream fos = new FileOutputStream(fileName);
                 byte[] buffer = new byte[4096];
                 int bytesRead;
@@ -181,35 +195,43 @@ public class Client {
 
                 fos.close();
                 System.out.println("File downloaded successfully: " + fileName);
-            } else {
-                System.out.println("Server response: File not found.");
+            } catch (InterruptedException e) {
+                System.out.println("Error: Thread interrupted while waiting for server response.");
+            } catch (IOException e) {
+                System.out.println("Error receiving file: " + e.getMessage());
             }
-        } catch (IOException e) {
-            System.out.println("Error receiving file: " + e.getMessage());
         }
     }
+
 
     private static void getServerResponse(DataInputStream disReader) {
         try {
             while (true) {
                 String serverResponse = disReader.readUTF();
-                synchronized (System.out) {
+                synchronized (Client.class) { // Synchronize access to shared state
                     System.out.println("\nServer: " + serverResponse);
-                    System.out.flush();
-                    if(serverResponse.contains("Connection closed.")) {
+
+                    // Reset the flag otherwise
+                    if (serverResponse.contains("Connection closed.")) {
                         running = false;
                         clientEndpoint.close();
                         break;
                     }
-                    System.out.print("Enter command: ");
+                    else noFile = serverResponse.contains("Error: File"); // Set the flag if the file is missing
+
+                    // Notify waiting threads
+                    Client.class.notifyAll();
                 }
 
+                System.out.print("Enter command: ");
             }
         } catch (IOException e) {
-            if (running)
+            if (running) {
                 System.out.println("Error: " + e.getMessage());
+            }
         }
     }
+
 
     private static boolean isConnected() {
         return clientEndpoint != null && !clientEndpoint.isClosed() && clientEndpoint.isConnected();

@@ -55,7 +55,7 @@ public class Server {
                         }
                         break;
 
-                    case "/send":
+                    case "/store":
                         if (clientHandle == null) {
                             dosWriter.writeUTF("Error: Please register first using /register <handle>.");
                             break;
@@ -82,12 +82,15 @@ public class Server {
                         if (parameters.length == 2) {
                             String filename = parameters[1];
                             if (storedFiles.contains(filename)) {
+                                dosWriter.writeUTF("OK");
                                 sendFile(dosWriter, filename);
                             } else {
                                 dosWriter.writeUTF("Error: File \"" + filename + "\" not found on the server.");
+                                dosWriter.flush();
                             }
                         } else {
                             dosWriter.writeUTF("Error: Invalid syntax. Use /get <filename>.");
+                            dosWriter.flush();
                         }
                         break;
 
@@ -97,7 +100,7 @@ public class Server {
                                 /join <server_ip_add> <port> - Connect to the server application
                                 /leave                      - Disconnect from the server application
                                 /register <handle>          - Register a unique handle or alias
-                                /send <file-path>           - Send file to the server
+                                /store <file-path>           - Send file to the server
                                 /dir                        - Request directory file list from the server
                                 /get <filename>             - Fetch a file from the server
                                 """);
@@ -140,6 +143,8 @@ public class Server {
 
         if (!file.exists()) {
             dosWriter.writeUTF("Error: File \"" + filename + "\" not found.");
+            dosWriter.writeLong(0);
+            dosWriter.flush();
             return;
         }
 
