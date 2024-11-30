@@ -167,43 +167,63 @@ public class Server {
     }
 
     public static void main(String[] args) {
-        ServerSocket serverSocket;
+        final ServerSocket serverSocket; // Declare it as final
         Scanner sc = new Scanner(System.in);
         int nPort;
-        boolean validInput = false;
 
-        while (!validInput) {
+        try {
             System.out.println("Enter port number: ");
-            try {
-                nPort = sc.nextInt();
-                if (nPort >= 1024 && nPort <= 65535) {
-                    try {
-                        serverSocket = new ServerSocket(nPort);
-                        validInput = true;
-                        System.out.println("Server: Listening on port " + nPort + "...");
+            nPort = sc.nextInt();
 
-                        while (true) {
-                            final Socket serverEndpoint = serverSocket.accept();
-                            System.out.println("Server: New client connected: " +
-                                    serverEndpoint.getRemoteSocketAddress());
-                            new Thread(() -> handleClient(serverEndpoint)).start();
-                        }
-                    } catch (IOException e) {
-                        System.out.println("Server: ERROR! Port " + nPort +
-                                " is unavailable. Please try another port.\n");
-                    }
-                } else {
-                    System.out.println("Invalid port number. Please enter a number between 1024 and 65535.\n");
-                }
-            } catch (InputMismatchException e) {
-                System.out.println("Invalid input. Please enter an integer.");
-                sc.next(); // Clear invalid input
+            if (nPort < 1024 || nPort > 65535) {
+                System.out.println("Invalid port number. Please enter a number between 1024 and 65535.");
+                return;
             }
+
+            serverSocket = new ServerSocket(nPort); // Initialize here
+            System.out.println("Server: Listening on port " + nPort + "...");
+
+            Thread serverThread = getServerThread(serverSocket);
+
+            // Monitor for the "shutdown" command
+            while (true) {
+                System.out.println("Type 'shutdown' to stop the server:");
+                String command = sc.next().trim();
+                if ("shutdown".equalsIgnoreCase(command)) {
+                    System.out.println("Server shutting down...");
+                    serverSocket.close();
+                    break;
+                }
+            }
+
+            serverThread.join(); // Wait for the server thread to finish
+        } catch (IOException | InterruptedException e) {
+            System.out.println("Error: " + e.getMessage());
+        } finally {
+            System.out.println("Server stopped.");
         }
+    }
+
+    private static Thread getServerThread(ServerSocket serverSocket) {
+        Thread serverThread = new Thread(() -> {
+            try {
+                while (!serverSocket.isClosed()) {
+                    Socket clientSocket = serverSocket.accept();
+                    System.out.println("Server: New client connected: " + clientSocket.getRemoteSocketAddress());
+                    new Thread(() -> handleClient(clientSocket)).start();
+                }
+            } catch (IOException e) {
+                if (!serverSocket.isClosed()) {
+                    System.out.println("Error accepting client connections: " + e.getMessage());
+                }
+            }
+        });
+        serverThread.start();
+        return serverThread;
     }
 }
 
-class ClientHandler {
+    class ClientHandler {
     private final Socket clientSocket;
 
     public ClientHandler(Socket socket) {
